@@ -1039,12 +1039,11 @@ func copystack(gp *g, newsize uintptr) {
 // user frames using the same precise maps used by the garbage collector.
 func adjustUserFrame(u *unwinder, adjinfo *adjustinfo) {
 	pc, sp := u.userFrameScanPC, u.userFrameScanSP
+	newLo := adjinfo.old.lo + adjinfo.delta
+	newHi := adjinfo.old.hi + adjinfo.delta
 	for pc != 0 {
-		base, words, pointerMask, ok := userFramePointerMap(pc, sp)
-		if ok && words != 0 {
+		if base, words, pointerMask, ok := userFramePointerMap(pc, sp); ok && words != 0 {
 			bytes := words * goarch.PtrSize
-			newLo := adjinfo.old.lo + adjinfo.delta
-			newHi := adjinfo.old.hi + adjinfo.delta
 			if pointerMask == nil || bytes/goarch.PtrSize != words || base < newLo || base+bytes < base || base+bytes > newHi {
 				throw("invalid user frame pointer map")
 			}
@@ -1054,6 +1053,14 @@ func adjustUserFrame(u *unwinder, adjinfo *adjustinfo) {
 			}
 			adjustpointers(unsafe.Pointer(base), &bits, adjinfo, funcInfo{})
 		}
+
+		if bpSlot, ok := userFrameCallerBPSlot(pc, sp); ok {
+			if bpSlot < newLo || bpSlot+goarch.PtrSize < bpSlot || bpSlot+goarch.PtrSize > newHi {
+				throw("invalid user frame caller frame pointer")
+			}
+			adjustpointer(adjinfo, unsafe.Pointer(bpSlot))
+		}
+
 		nextPC, nextSP, more := userFrameNextUser(pc, sp)
 		if !more {
 			return

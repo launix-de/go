@@ -522,3 +522,12 @@ func jit_userFramePreempt() bool {
 func jit_userFrameStackCheck() (guardOffset, stackSmall, moreStackPC uintptr) {
 	return unsafe.Offsetof(g{}.stackguard0), abi.StackSmall, abi.FuncPCABI0(morestack)
 }
+
+//go:linkname jit_allocateTyped runtime/jit.allocateTyped
+func jit_allocateTyped(runtimeType unsafe.Pointer) unsafe.Pointer {
+	typ := (*_type)(runtimeType)
+	if typ == nil {
+		throw("runtime/jit: nil allocation type")
+	}
+	return mallocgc(typ.Size_, typ, true)
+}

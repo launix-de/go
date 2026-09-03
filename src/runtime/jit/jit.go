@@ -40,7 +40,7 @@ package jit
 
 import (
 	"sync"
-	_ "unsafe" // for go:linkname
+	"unsafe"
 )
 
 // UnwindMode controls how the Go runtime handles user frames during
@@ -214,6 +214,18 @@ func (h Handle) Unregister() {
 func Preempt() bool {
 	return userFramePreempt()
 }
+
+// AllocTyped allocates one zeroed, garbage-collected object for JIT-generated
+// code. runtimeType must be the runtime type word of a reflect.Type. Keeping
+// size lookup and mallocgc inside the runtime/jit boundary isolates JIT clients
+// from the private runtime allocation ABI while preserving the exact GC bitmap
+// required for trailing closure context fields.
+func AllocTyped(runtimeType unsafe.Pointer) unsafe.Pointer {
+	return allocateTyped(runtimeType)
+}
+
+//go:linkname allocateTyped runtime/jit.allocateTyped
+func allocateTyped(runtimeType unsafe.Pointer) unsafe.Pointer
 
 //go:linkname userFramePreempt runtime/jit.userFramePreempt
 func userFramePreempt() bool

@@ -8,6 +8,7 @@ package jit_test
 
 import (
 	"fmt"
+	"reflect"
 	"runtime"
 	"runtime/jit"
 	"strings"
@@ -16,6 +17,32 @@ import (
 	"testing"
 	"unsafe"
 )
+
+type interfaceWords struct {
+	tab  unsafe.Pointer
+	data unsafe.Pointer
+}
+
+type typedAllocationTestObject struct {
+	Pointer *int
+	Value   uintptr
+}
+
+func TestAllocTypedUsesRuntimeTypeSizeAndPointerMap(t *testing.T) {
+	typ := reflect.TypeOf(typedAllocationTestObject{})
+	runtimeType := (*interfaceWords)(unsafe.Pointer(&typ)).data
+	object := (*typedAllocationTestObject)(jit.AllocTyped(runtimeType))
+	if object.Pointer != nil || object.Value != 0 {
+		t.Fatalf("AllocTyped returned non-zero memory: %#v", object)
+	}
+	value := 42
+	object.Pointer = &value
+	runtime.GC()
+	if *object.Pointer != 42 {
+		t.Fatalf("typed allocation lost pointer field: %d", *object.Pointer)
+	}
+	runtime.KeepAlive(object)
+}
 
 // goFuncPtr returns the raw entry point of a Go function value.
 func goFuncPtr(fn func()) uintptr {

@@ -1,4 +1,4 @@
-// Copyright 2009 The Go Authors. All rights reserved.
+// Copyright 2009-2026 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -859,7 +859,9 @@ func (sl *sweepLocked) sweep(preserve bool) bool {
 func (s *mspan) reportZombies() {
 	printlock()
 	print("runtime: marked free object in span ", s, ", elemsize=", s.elemsize, " freeindex=", s.freeindex, " (bad use of unsafe.Pointer or having race conditions? try -d=checkptr or -race)\n")
-	mbits := s.markBitsForBase()
+	// For inline-mark spans, sweep has copied the marks to gcmarkBits and
+	// cleared the inline storage. Use the same bitmap as the zombie check.
+	mbits := markBits{&s.gcmarkBits.x, uint8(1), 0}
 	abits := s.allocBitsForIndex(0)
 	for i := uintptr(0); i < uintptr(s.nelems); i++ {
 		addr := s.base() + i*s.elemsize

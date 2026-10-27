@@ -4275,10 +4275,12 @@ func (s *state) minMax(n *ir.CallExpr) *ssa.Value {
 		if typ.IsFloat() {
 			hasIntrinsic := false
 			switch Arch.LinkArch.Family {
-			case sys.AMD64, sys.ARM64, sys.Loong64, sys.RISCV64, sys.S390X:
+			case sys.AMD64, sys.ARM64, sys.Loong64, sys.RISCV64:
 				hasIntrinsic = true
 			case sys.PPC64:
 				hasIntrinsic = buildcfg.GOPPC64 >= 9
+			case sys.S390X:
+				// FIXME: add check once GOS390X exists
 			}
 
 			if hasIntrinsic {
@@ -5110,6 +5112,16 @@ func (s *state) call(n *ir.CallExpr, k callKind, returnResultAddr bool, deferExt
 
 		for i, n := range args {
 			callArgs = append(callArgs, s.putArg(n, t.Param(i).Type))
+		}
+
+		// In -race mode, we need to call racefuncexit before a tail call.
+		// A tail call reuses our frame and returns directly to our caller,
+		// so this is the last chance we get to tell the race detector that
+		// this function is done. Note: this has to happen after the
+		// arguments are evaluated, otherwise races in the argument
+		// expressions would be attributed to the caller instead.
+		if k == callTail && s.instrumentEnterExit {
+			s.rtcall(ir.Syms.Racefuncexit, true, nil)
 		}
 
 		callArgs = append(callArgs, s.mem())

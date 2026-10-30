@@ -1,4 +1,4 @@
-// Copyright 2025 The Go Authors. All rights reserved.
+// Copyright 2025-2026 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -251,33 +251,26 @@ func StackCheckConfig() StackCheck {
 // JIT compilers must call AddStackMaps after the corresponding machine code is
 // complete and before making that code reachable by another goroutine.
 func (h Handle) AddStackMaps(stackMaps ...StackMap) {
+	registryMu.Lock()
+	defer registryMu.Unlock()
 	addUserFrameStackMaps(h.handle, stackMaps)
 }
 
-// liveRegions keeps function pointers (closures) alive so the GC does
-// not collect them. The runtime stores these pointers in persistentalloc
-// memory that is invisible to the GC, so we must retain a reference here.
-var (
-	liveRegionsMu sync.Mutex
-	liveRegions   map[uintptr]Region
-)
+// registryMu serializes all metadata writers on ordinary Go goroutines.
+// The runtime's published search tree owns Describe closures and stack
+// maps as GC-visible objects; readers never acquire this mutex.
+var registryMu sync.Mutex
 
 // Register makes the runtime aware of a user code region.
 func Register(r Region) Handle {
+	registryMu.Lock()
+	defer registryMu.Unlock()
 	h := registerUserFrameRegion(
 		r.Start, r.End,
 		uint8(r.Unwind),
 		r.Describe,
 		r.StackMaps,
 	)
-
-	// Keep closures alive for the GC.
-	liveRegionsMu.Lock()
-	if liveRegions == nil {
-		liveRegions = make(map[uintptr]Region)
-	}
-	liveRegions[h] = r
-	liveRegionsMu.Unlock()
 
 	return Handle{handle: h}
 }
@@ -287,11 +280,9 @@ func Register(r Region) Handle {
 // from the region remains on a goroutine stack, and that the code cannot be
 // entered again.
 func (h Handle) Unregister() {
+	registryMu.Lock()
+	defer registryMu.Unlock()
 	unregisterUserFrameRegion(h.handle)
-
-	liveRegionsMu.Lock()
-	delete(liveRegions, h.handle)
-	liveRegionsMu.Unlock()
 }
 
 // Preempt reports whether the Go runtime is requesting the current

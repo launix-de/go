@@ -73,7 +73,8 @@ var depsRules = `
 	internal/byteorder, internal/cpu, internal/goarch < internal/chacha8rand;
 	internal/goarch, math/bits < internal/strconv;
 
-	internal/cpu, internal/strconv < simd/archsimd;
+	internal/strconv < simd/internal/simdfmt;
+	internal/cpu, simd/internal/simdfmt < simd/archsimd;
 
 	# RUNTIME is the core runtime group of packages, all of them very light-weight.
 	internal/abi,
@@ -180,10 +181,6 @@ var depsRules = `
 	MATH
 	< runtime/metrics;
 
-	MATH
-	< simd/internal/spec
-	< simd/internal/simdref;
-
 	MATH, unicode/utf8
 	< strconv;
 
@@ -264,6 +261,10 @@ var depsRules = `
 	< encoding/binary;
 
 	FMT, encoding < flag;
+
+	FMT, MATH
+	< simd/internal/spec
+	< simd/internal/simdref;
 
 	FMT, simd/archsimd < simd/internal/bridge;
 

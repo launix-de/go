@@ -725,6 +725,7 @@ func (b *Builder) buildExport(ctx context.Context, a *Action) (err error) {
 	if p.Internal.Cover.Mode != "" {
 		gofiles = coverPr.goSources
 	}
+	gofiles = slices.Clip(gofiles)
 
 	if p.UsesCgo() || p.UsesSwig() {
 		if runCgoPr == nil {
@@ -738,14 +739,10 @@ func (b *Builder) buildExport(ctx context.Context, a *Action) (err error) {
 		cfiles = nil
 		if p.Standard && p.ImportPath == "runtime/cgo" {
 			// filter to the non-gcc files.
-			i := 0
-			for _, f := range sfiles {
-				if !strings.HasPrefix(f, "gcc_") {
-					sfiles[i] = f
-					i++
-				}
-			}
-			sfiles = sfiles[:i]
+			sfiles = slices.Clone(sfiles)
+			sfiles = slices.DeleteFunc(sfiles, func(f string) bool {
+				return strings.HasPrefix(f, "gcc_")
+			})
 		} else {
 			sfiles = nil
 		}

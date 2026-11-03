@@ -554,6 +554,12 @@ func jit_userFrameStackCheck() (guardOffset, stackSmall, moreStackPC uintptr) {
 	return unsafe.Offsetof(g{}.stackguard0), abi.StackSmall, abi.FuncPCABI0(morestack)
 }
 
+//go:linkname jit_userFrameWriteBarrier runtime/jit.userFrameWriteBarrier
+func jit_userFrameWriteBarrier() uintptr { return uintptr(unsafe.Pointer(&writeBarrier)) }
+
+//go:linkname jit_userFramePreemptOffset runtime/jit.userFramePreemptOffset
+func jit_userFramePreemptOffset() uintptr { return unsafe.Offsetof(g{}.preempt) }
+
 // badUserFrame identifies a malformed active map without allocating or calling
 // JIT code from the collector or stack copier.
 func badUserFrame(reason string, pc, sp, base, words uintptr) {

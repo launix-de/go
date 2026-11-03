@@ -102,10 +102,10 @@ func TailTypeFor[T any](count uintptr) TailType {
 	}
 
 	exactSize := last.Offset + tailSize
-	if count == 0 {
+	if tailSize == 0 {
 		// Go gives a final zero-sized field a distinct address by retaining
-		// trailing padding in the base struct. Preserve that layout when the
-		// repeated tail is empty.
+		// trailing padding in the base struct. Preserve that layout whenever
+		// repeating the element still produces a zero-sized tail.
 		exactSize = base.Size_
 	} else if align := uintptr(base.Align_); exactSize%align != 0 {
 		padding := align - exactSize%align
@@ -348,6 +348,12 @@ func userFramePreempt() bool
 
 //go:linkname userFrameStackCheck runtime/jit.userFrameStackCheck
 func userFrameStackCheck() (guardOffset, stackSmall, moreStackPC uintptr)
+
+//go:linkname userFrameWriteBarrier runtime/jit.userFrameWriteBarrier
+func userFrameWriteBarrier() uintptr
+
+//go:linkname userFramePreemptOffset runtime/jit.userFramePreemptOffset
+func userFramePreemptOffset() uintptr
 
 // mallocgc is private runtime ABI. runtime/jit is part of the same standard
 // library revision, so this dependency stays inside the package shipped with

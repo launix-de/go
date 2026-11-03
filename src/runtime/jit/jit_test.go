@@ -574,6 +574,84 @@ func TestNestedUserFramesAreRegularBacktraceEntries(t *testing.T) {
 	}
 }
 
+// TestNestedUnwindStopEndsTraceback verifies that an unwind recipe does not
+// turn an UnwindStop region into a traversable frame when it is reached from a
+// nested user frame.
+func TestNestedUnwindStopEndsTraceback(t *testing.T) {
+	innerCode := callTrampoline(goFuncPtr(goStackCapture))
+	innerAddr, innerSize, err := allocExecutable(innerCode)
+	if err != nil {
+		t.Fatalf("allocExecutable inner: %v", err)
+	}
+	defer freeExecutable(innerAddr, innerSize)
+	innerHandle := jit.Register(jit.Region{
+		Start:     innerAddr,
+		End:       innerAddr + uintptr(innerSize),
+		Unwind:    jit.UnwindDeclare,
+		StackMaps: callTrampolineStackMaps(),
+	})
+	defer innerHandle.Unregister()
+
+	outerCode := callTrampoline(innerAddr)
+	outerAddr, outerSize, err := allocExecutable(outerCode)
+	if err != nil {
+		t.Fatalf("allocExecutable outer: %v", err)
+	}
+	defer freeExecutable(outerAddr, outerSize)
+	outerHandle := jit.Register(jit.Region{
+		Start:     outerAddr,
+		End:       outerAddr + uintptr(outerSize),
+		Unwind:    jit.UnwindStop,
+		StackMaps: callTrampolineStackMaps(),
+	})
+	defer outerHandle.Unregister()
+
+	capturedStack = ""
+	callJIT(outerAddr)
+	if strings.Contains(capturedStack, "TestNestedUnwindStopEndsTraceback") {
+		t.Fatalf("traceback crossed UnwindStop region:\n%s", capturedStack)
+	}
+}
+
+//go:noinline
+func collectThroughStopFrame() {
+	for i := 0; i < 3; i++ {
+		runtime.GC()
+		runtime.Gosched()
+	}
+}
+
+func TestUnwindStopPreservesEnclosingGoRoots(t *testing.T) {
+	code := callTrampoline(goFuncPtr(collectThroughStopFrame))
+	addr, size, err := allocExecutable(code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer freeExecutable(addr, size)
+	h := jit.Register(jit.Region{Start: addr, End: addr + uintptr(size), Unwind: jit.UnwindStop, StackMaps: callTrampolineStackMaps()})
+	defer h.Unregister()
+	var finalized atomic.Bool
+	object := new([4096]byte)
+	object[0] = 42
+	runtime.SetFinalizer(object, func(*[4096]byte) { finalized.Store(true) })
+	callJIT(addr)
+	if finalized.Load() || object[0] != 42 {
+		t.Fatal("traceback barrier hid an enclosing Go root from GC")
+	}
+	runtime.KeepAlive(object)
+	runtime.SetFinalizer(object, nil)
+}
+
+func TestStackCheckConfig(t *testing.T) {
+	config := jit.StackCheckConfig()
+	if config.StackGuardOffset == 0 || config.StackSmall == 0 || config.MoreStackPC == 0 {
+		t.Fatalf("incomplete stack check configuration: %+v", config)
+	}
+	if second := jit.StackCheckConfig(); second != config {
+		t.Fatalf("stack check configuration changed: first %+v, second %+v", config, second)
+	}
+}
+
 // TestStackMapInactive verifies that registering stack maps without an active
 // frame does not add global GC roots.
 func TestStackMapInactive(t *testing.T) {
